@@ -1,2 +1,16 @@
 # spring-seminar-judge
 스프링 세미나 채점 서버
+
+## 로컬 채점
+
+학생 저장소의 특정 커밋을 upstream의 원본 빌드 설정과 테스트로 실행합니다.
+
+```bash
+./grade.sh <학생 저장소> <학생 커밋 SHA>
+```
+
+기본 upstream은 같은 상위 디렉터리의 `spring-seminar-upstream`이며, 다음 환경변수로 바꿀 수 있습니다.
+
+```bash
+UPSTREAM_REPOSITORY=/path/to/upstream UPSTREAM_REF=<commit> ./grade.sh <repo> <commit>
+```
