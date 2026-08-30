@@ -18,12 +18,17 @@ UPSTREAM_REPOSITORY=/path/to/upstream UPSTREAM_REF=<commit> ./grade.sh <repo> <c
 ## HTTP API
 
 ```bash
+python3 -m pip install -r requirements.txt
+OIDC_AUDIENCE=seminar-judge \
+ALLOWED_REPOSITORY_OWNER=WaffleStudio24-5 \
+ALLOWED_ASSIGNMENTS=assignment-1-v1 \
 python3 server.py
 ```
 
 ```http
 POST /gradings
 Content-Type: application/json
+Authorization: Bearer <GitHub Actions OIDC token>
 
 {
   "repository": "https://github.com/user/assignment.git",
@@ -33,3 +38,5 @@ Content-Type: application/json
 ```
 
 기본 주소는 `127.0.0.1:8080`입니다. 배포 환경에서는 `HOST`, `PORT`, `UPSTREAM_REPOSITORY`를 지정합니다.
+기본적으로 `main` 브랜치의 토큰만 허용하며 `ALLOWED_REF`로 변경할 수 있습니다.
+여러 과제 버전은 `ALLOWED_ASSIGNMENTS=assignment-1-v1,assignment-2-v1`처럼 쉼표로 구분합니다.
