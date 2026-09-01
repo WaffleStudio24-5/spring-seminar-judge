@@ -4,20 +4,57 @@ import time
 import unittest
 from http.server import HTTPServer
 from types import SimpleNamespace
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 from urllib.error import HTTPError
 from urllib.request import Request, urlopen
 
-import server
 import jwt
 from cryptography.hazmat.primitives.asymmetric import rsa
+
+import server
+
+COMMIT = "0123456789abcdef0123456789abcdef01234567"
+WORKFLOW_SHA = "a" * 40
+WORKFLOW_REF = (
+    "WaffleStudio24-5/spring-seminar-judge/.github/workflows/grade.yml@refs/heads/main"
+)
+
+
+def result_payload():
+    return {
+        "repository": "student/assignment",
+        "commit": COMMIT,
+        "assignment": "assignment-1-v1",
+        "assignment_sha": COMMIT,
+        "status": "PASSED",
+        "run_id": "123",
+        "run_number": "4",
+        "run_attempt": "1",
+    }
+
+
+def oidc_claims():
+    return {
+        "repository": "student/assignment",
+        "sha": COMMIT,
+        "ref": "refs/heads/main",
+        "event_name": "push",
+        "repository_visibility": "public",
+        "runner_environment": "github-hosted",
+        "job_workflow_ref": WORKFLOW_REF,
+        "job_workflow_sha": WORKFLOW_SHA,
+        "run_id": "123",
+        "run_number": "4",
+        "run_attempt": "1",
+    }
 
 
 class ServerTest(unittest.TestCase):
     def setUp(self):
-        self.authentication = patch("server.authenticate_request").start()
+        patch("server.authenticate_request").start()
+        self.save_result = patch("server.save_result").start()
         self.addCleanup(patch.stopall)
-        self.httpd = HTTPServer(("127.0.0.1", 0), server.GradingHandler)
+        self.httpd = HTTPServer(("127.0.0.1", 0), server.ResultHandler)
         self.thread = threading.Thread(target=self.httpd.serve_forever)
         self.thread.start()
 
@@ -28,7 +65,7 @@ class ServerTest(unittest.TestCase):
 
     def post(self, payload):
         request = Request(
-            f"http://127.0.0.1:{self.httpd.server_port}/gradings",
+            f"http://127.0.0.1:{self.httpd.server_port}/results",
             data=json.dumps(payload).encode(),
             headers={"Authorization": "Bearer token", "Content-Type": "application/json"},
             method="POST",
@@ -39,130 +76,83 @@ class ServerTest(unittest.TestCase):
             response = error
         return response.status, json.loads(response.read())
 
-    @patch("server.run_grading", return_value=0)
-    def test_returns_passed(self, run_grading):
-        payload = {
-            "repository": "https://github.com/user/assignment.git",
-            "commit": "0123456789abcdef0123456789abcdef01234567",
-            "assignment": "assignment-1-v1",
-        }
+    def test_records_result(self):
+        self.assertEqual((201, {"recorded": True}), self.post(result_payload()))
+        self.save_result.assert_called_once()
 
-        self.assertEqual((200, {"status": "PASSED"}), self.post(payload))
-        run_grading.assert_called_once()
-
-    @patch("server.run_grading", return_value=128)
-    def test_distinguishes_runner_error(self, _run_grading):
-        payload = {
-            "repository": "https://github.com/user/assignment.git",
-            "commit": "0123456789abcdef0123456789abcdef01234567",
-            "assignment": "assignment-1-v1",
-        }
-
-        status, body = self.post(payload)
-        self.assertEqual(500, status)
-        self.assertEqual("ERROR", body["status"])
-
-    @patch("server.run_grading", return_value=1)
-    def test_returns_failed(self, _run_grading):
-        payload = {
-            "repository": "https://github.com/user/assignment.git",
-            "commit": "0123456789abcdef0123456789abcdef01234567",
-            "assignment": "assignment-1-v1",
-        }
-
-        self.assertEqual((200, {"status": "FAILED"}), self.post(payload))
-
-    def test_rejects_invalid_repository(self):
-        payload = {
-            "repository": "file:///etc/passwd",
-            "commit": "0123456789abcdef0123456789abcdef01234567",
-            "assignment": "assignment-1-v1",
-        }
+    def test_rejects_invalid_status(self):
+        payload = result_payload()
+        payload["status"] = "SUCCESS"
 
         status, body = self.post(payload)
         self.assertEqual(400, status)
-        self.assertIn("repository", body["error"])
+        self.assertIn("status", body["error"])
 
 
 class AuthenticationTest(unittest.TestCase):
-    @patch.dict(
-        "os.environ",
-        {
-            "OIDC_AUDIENCE": "seminar-judge",
-            "ALLOWED_REPOSITORY_OWNER": "wafflestudio",
-            "ALLOWED_ASSIGNMENTS": "assignment-1-v1",
-        },
-        clear=True,
-    )
-    @patch("server.decode_oidc_token")
-    def test_matches_token_to_request(self, decode_oidc_token):
-        commit = "0123456789abcdef0123456789abcdef01234567"
-        decode_oidc_token.return_value = {
-            "repository": "wafflestudio/assignment",
-            "repository_owner": "wafflestudio",
-            "sha": commit,
-            "ref": "refs/heads/main",
-        }
+    environment = {
+        "OIDC_AUDIENCE": "seminar-judge",
+        "ALLOWED_REPOSITORIES": "student/assignment",
+        "ALLOWED_ASSIGNMENTS": f"assignment-1-v1={COMMIT}",
+        "ALLOWED_WORKFLOW_REF": WORKFLOW_REF,
+        "ALLOWED_WORKFLOW_SHAS": WORKFLOW_SHA,
+    }
 
-        server.authenticate_request(
-            "Bearer token",
-            "https://github.com/wafflestudio/assignment.git",
-            commit,
-            "assignment-1-v1",
-        )
-
-    @patch.dict(
-        "os.environ",
-        {
-            "OIDC_AUDIENCE": "seminar-judge",
-            "ALLOWED_REPOSITORY_OWNER": "wafflestudio",
-            "ALLOWED_ASSIGNMENTS": "assignment-1-v1",
-        },
-        clear=True,
-    )
+    @patch.dict("os.environ", environment, clear=True)
     @patch("server.decode_oidc_token")
-    def test_rejects_a_different_commit(self, decode_oidc_token):
-        decode_oidc_token.return_value = {
-            "repository": "wafflestudio/assignment",
-            "repository_owner": "wafflestudio",
-            "sha": "f" * 40,
-            "ref": "refs/heads/main",
-        }
+    def test_matches_token_to_result(self, decode_oidc_token):
+        decode_oidc_token.return_value = oidc_claims()
+        server.authenticate_request("Bearer token", server.validate_request(result_payload()))
+
+    @patch.dict("os.environ", environment, clear=True)
+    @patch("server.decode_oidc_token")
+    def test_rejects_a_different_workflow_commit(self, decode_oidc_token):
+        claims = oidc_claims()
+        claims["job_workflow_sha"] = "f" * 40
+        decode_oidc_token.return_value = claims
 
         with self.assertRaises(PermissionError):
-            server.authenticate_request(
-                "Bearer token",
-                "https://github.com/wafflestudio/assignment.git",
-                "0" * 40,
-                "assignment-1-v1",
-            )
+            server.authenticate_request("Bearer token", server.validate_request(result_payload()))
 
-    def test_verifies_token_signature_and_standard_claims(self):
+    def test_verifies_token_signature_and_required_claims(self):
         private_key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
         now = int(time.time())
-        token = jwt.encode(
-            {
-                "aud": "seminar-judge",
-                "exp": now + 60,
-                "iat": now,
-                "iss": server.OIDC_ISSUER,
-                "repository": "wafflestudio/assignment",
-                "repository_owner": "wafflestudio",
-                "ref": "refs/heads/main",
-                "sha": "0" * 40,
-            },
-            private_key,
-            algorithm="RS256",
-        )
+        claims = oidc_claims() | {
+            "aud": "seminar-judge",
+            "exp": now + 60,
+            "iat": now,
+            "iss": server.OIDC_ISSUER,
+        }
+        token = jwt.encode(claims, private_key, algorithm="RS256")
 
         with patch.object(
             server.OIDC_JWKS,
             "get_signing_key_from_jwt",
             return_value=SimpleNamespace(key=private_key.public_key()),
         ):
-            claims = server.decode_oidc_token(token, "seminar-judge")
+            decoded = server.decode_oidc_token(token, "seminar-judge")
 
-        self.assertEqual("wafflestudio/assignment", claims["repository"])
+        self.assertEqual(WORKFLOW_SHA, decoded["job_workflow_sha"])
+
+
+class StorageTest(unittest.TestCase):
+    @patch.dict(
+        "os.environ",
+        {"SUPABASE_URL": "https://project.supabase.co", "SUPABASE_SECRET_KEY": "secret"},
+        clear=True,
+    )
+    @patch("server.urlopen")
+    def test_upserts_result_with_secret_key(self, open_url):
+        response = MagicMock()
+        response.__enter__.return_value.status = 201
+        open_url.return_value = response
+
+        server.save_result(server.validate_request(result_payload()))
+
+        request = open_url.call_args.args[0]
+        self.assertEqual("secret", request.get_header("Apikey"))
+        self.assertIn("on_conflict=repository,assignment,workflow_run_id,run_attempt", request.full_url)
+        self.assertEqual(123, json.loads(request.data)["workflow_run_id"])
 
 
 if __name__ == "__main__":
