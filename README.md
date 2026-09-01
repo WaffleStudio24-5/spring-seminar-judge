@@ -1,5 +1,21 @@
 # spring-seminar-judge
-스프링 세미나 채점 서버
+스프링 세미나 채점 workflow와 결과 수집 서버
+
+## GitHub Actions 채점
+
+공개 저장소의 reusable workflow를 학생 과제 저장소에서 호출합니다.
+
+```yaml
+jobs:
+  grade:
+    uses: WaffleStudio24-5/spring-seminar-judge/.github/workflows/grade.yml@main
+    with:
+      assignment: main
+```
+
+workflow는 학생 저장소와 지정한 `spring-seminar-upstream` 버전을 각각 checkout한 뒤, 학생의 `src/main`만 원본 프로젝트에 적용해 테스트합니다.
+
+공개 학생 저장소에서 호출하려면 이 저장소도 공개되어 있어야 합니다.
 
 ## 로컬 채점
 

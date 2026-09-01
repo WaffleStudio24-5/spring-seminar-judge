@@ -1,0 +1,43 @@
+name: Grade submission
+
+on:
+  workflow_call:
+    inputs:
+      assignment:
+        description: Upstream tag, branch, or commit to grade against
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  grade:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout student submission
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          path: student
+          persist-credentials: false
+
+      - name: Checkout assignment
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: WaffleStudio24-5/spring-seminar-upstream
+          ref: ${{ inputs.assignment }}
+          path: assignment
+          persist-credentials: false
+
+      - name: Apply student implementation
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -d student/src/main
+          rm -r -- assignment/src/main
+          cp -R -- student/src/main assignment/src/main
+
+      - name: Run tests
+        working-directory: assignment
+        run: ./gradlew test --no-daemon
