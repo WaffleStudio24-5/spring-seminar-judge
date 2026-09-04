@@ -110,9 +110,9 @@ API는 GitHub 서명과 함께 repository, commit, run ID, `job_workflow_ref`를
 
 `GET /api/results`는 최근 결과 100개를 공개 JSON으로 반환합니다.
 
-## 결과 대시보드 배포
+## 결과 대시보드
 
-같은 저장소를 Vercel에 프로젝트 하나 더 import하고 Root Directory를 `dashboard`로 설정합니다. Framework Preset은 `Other`로 두고 Build Command는 비워 둡니다. `dashboard/index.html`이 Result API를 읽어 최신 결과를 표시합니다.
+같은 Vercel 프로젝트의 루트 주소(`/`)에서 결과 대시보드를 제공합니다. 별도 프로젝트나 환경변수는 필요하지 않습니다.
 
 로컬에서는 같은 환경변수를 지정하고 `python3 server.py`를 실행하면 `http://127.0.0.1:8080/results`에서 확인할 수 있습니다.
 

@@ -79,6 +79,13 @@ class ServerTest(unittest.TestCase):
         response = urlopen(f"http://127.0.0.1:{self.httpd.server_port}/results")
         return response.status, response.headers, json.loads(response.read())
 
+    def test_serves_dashboard_at_root(self):
+        response = urlopen(f"http://127.0.0.1:{self.httpd.server_port}/")
+
+        self.assertEqual(200, response.status)
+        self.assertEqual("text/html; charset=utf-8", response.headers["Content-Type"])
+        self.assertIn(b"Judge results", response.read())
+
     def test_records_result(self):
         self.assertEqual((201, {"recorded": True}), self.post(result_payload()))
         self.save_result.assert_called_once()

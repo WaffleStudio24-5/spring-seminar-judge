@@ -3,6 +3,7 @@ import json
 import os
 import re
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from pathlib import Path
 from urllib.parse import urlencode
 from urllib.request import Request, urlopen
 
@@ -204,6 +205,9 @@ def load_results():
 
 class ResultHandler(BaseHTTPRequestHandler):
     def do_GET(self):
+        if self.path == "/":
+            self.send_html(Path(__file__).with_name("dashboard").joinpath("index.html").read_bytes())
+            return
         if self.path not in ("/results", "/api/results"):
             self.send_json(404, {"error": "not found"})
             return
@@ -252,6 +256,13 @@ class ResultHandler(BaseHTTPRequestHandler):
         self.send_response(status)
         self.send_header("Content-Type", "application/json")
         self.send_header("Access-Control-Allow-Origin", "*")
+        self.send_header("Content-Length", str(len(data)))
+        self.end_headers()
+        self.wfile.write(data)
+
+    def send_html(self, data):
+        self.send_response(200)
+        self.send_header("Content-Type", "text/html; charset=utf-8")
         self.send_header("Content-Length", str(len(data)))
         self.end_headers()
         self.wfile.write(data)
