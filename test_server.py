@@ -105,7 +105,7 @@ class AuthenticationTest(unittest.TestCase):
     environment = {
         "OIDC_AUDIENCE": "seminar-judge",
         "ALLOWED_SOURCE_REPOSITORY": "school/assignment",
-        "ALLOWED_ASSIGNMENTS": f"assignment-1-v1={COMMIT}",
+        "ALLOWED_ASSIGNMENTS": "assignment-1-v1",
         "ALLOWED_WORKFLOW_REF": WORKFLOW_REF,
         "ALLOWED_WORKFLOW_SHAS": WORKFLOW_SHA,
     }
@@ -128,6 +128,17 @@ class AuthenticationTest(unittest.TestCase):
 
         with self.assertRaises(PermissionError):
             server.authenticate_request("Bearer token", server.validate_request(result_payload()))
+
+    @patch.dict("os.environ", environment, clear=True)
+    @patch("server.verify_repository_source")
+    @patch("server.decode_oidc_token")
+    def test_rejects_an_unknown_assignment(self, decode_oidc_token, _verify_repository_source):
+        decode_oidc_token.return_value = oidc_claims()
+        payload = result_payload()
+        payload["assignment"] = "unknown"
+
+        with self.assertRaises(PermissionError):
+            server.authenticate_request("Bearer token", server.validate_request(payload))
 
     def test_verifies_token_signature_and_required_claims(self):
         private_key = rsa.generate_private_key(public_exponent=65537, key_size=2048)

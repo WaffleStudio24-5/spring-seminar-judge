@@ -7,10 +7,6 @@ on:
         description: Assignment name
         required: true
         type: string
-      assignment_sha:
-        description: Exact upstream commit to grade against
-        required: true
-        type: string
       result_url:
         description: Result API base URL
         required: false
@@ -21,12 +17,15 @@ jobs:
   grade:
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    outputs:
+      assignment_sha: ${{ steps.assignment-version.outputs.sha }}
     permissions:
       contents: read
     steps:
       - name: Checkout student submission
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
+          ref: ${{ github.sha }}
           path: student
           persist-credentials: false
 
@@ -34,9 +33,14 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           repository: WaffleStudio24-5/spring-seminar-upstream
-          ref: ${{ inputs.assignment_sha }}
+          ref: main
           path: assignment
           persist-credentials: false
+
+      - name: Record assignment version
+        id: assignment-version
+        working-directory: assignment
+        run: echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
 
       - name: Apply student implementation
         shell: bash
@@ -60,7 +64,7 @@ jobs:
       - name: Report result
         env:
           ASSIGNMENT: ${{ inputs.assignment }}
-          ASSIGNMENT_SHA: ${{ inputs.assignment_sha }}
+          ASSIGNMENT_SHA: ${{ needs.grade.outputs.assignment_sha }}
           COMMIT_SHA: ${{ github.sha }}
           GRADE_RESULT: ${{ needs.grade.result }}
           REPOSITORY: ${{ github.repository }}

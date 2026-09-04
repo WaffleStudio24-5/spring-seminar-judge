@@ -11,11 +11,10 @@ jobs:
     uses: WaffleStudio24-5/spring-seminar-judge/.github/workflows/grade.yml@main
     with:
       assignment: main
-      assignment_sha: af730b224a94ec2540d2e51f95cbd3d0b92e3b6f
       result_url: https://<vercel-project>.vercel.app/api
 ```
 
-workflow는 학생 저장소와 지정한 `spring-seminar-upstream` 버전을 각각 checkout한 뒤, 학생의 `src/main`만 원본 프로젝트에 적용해 테스트합니다.
+workflow는 push된 학생 커밋과 `spring-seminar-upstream`의 최신 `main`을 각각 checkout한 뒤, 학생의 `src/main`만 원본 프로젝트에 적용해 테스트합니다. 결과에는 실제 사용한 upstream 커밋 SHA가 기록됩니다.
 
 공개 학생 저장소에서 호출하려면 이 저장소도 공개되어 있어야 합니다.
 
@@ -62,7 +61,7 @@ SUPABASE_URL=https://<project-ref>.supabase.co
 SUPABASE_SECRET_KEY=sb_secret_...
 OIDC_AUDIENCE=seminar-judge
 ALLOWED_SOURCE_REPOSITORY=WaffleStudio24-5/spring-seminar-upstream
-ALLOWED_ASSIGNMENTS=main=af730b224a94ec2540d2e51f95cbd3d0b92e3b6f
+ALLOWED_ASSIGNMENTS=main
 ALLOWED_WORKFLOW_REF=WaffleStudio24-5/spring-seminar-judge/.github/workflows/grade.yml@refs/heads/main
 ALLOWED_WORKFLOW_SHAS=<배포한 judge commit SHA>
 ```
@@ -89,7 +88,7 @@ SUPABASE_URL=https://<project-ref>.supabase.co \
 SUPABASE_SECRET_KEY=sb_secret_... \
 OIDC_AUDIENCE=seminar-judge \
 ALLOWED_SOURCE_REPOSITORY=WaffleStudio24-5/spring-seminar-upstream \
-ALLOWED_ASSIGNMENTS=assignment-1-v1=0123456789abcdef0123456789abcdef01234567 \
+ALLOWED_ASSIGNMENTS=assignment-1-v1 \
 ALLOWED_WORKFLOW_REF=WaffleStudio24-5/spring-seminar-judge/.github/workflows/grade.yml@refs/heads/main \
 ALLOWED_WORKFLOW_SHAS=<허용할 judge workflow commit SHA> \
 python3 server.py

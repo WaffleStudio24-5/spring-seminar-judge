@@ -100,16 +100,6 @@ def configured_values(name):
     return values
 
 
-def configured_assignments():
-    assignments = {}
-    for value in configured_values("ALLOWED_ASSIGNMENTS"):
-        name, separator, commit = value.partition("=")
-        if not separator or not ASSIGNMENT_PATTERN.fullmatch(name) or not COMMIT_PATTERN.fullmatch(commit):
-            raise RuntimeError("ALLOWED_ASSIGNMENTS must contain name=commit pairs")
-        assignments[name] = commit.lower()
-    return assignments
-
-
 def verify_repository_source(repository):
     source_repository = os.environ.get("ALLOWED_SOURCE_REPOSITORY", "")
     if not REPOSITORY_PATTERN.fullmatch(source_repository):
@@ -149,9 +139,8 @@ def authenticate_request(authorization, result):
         raise PermissionError("missing bearer token")
 
     claims = decode_oidc_token(authorization[len(prefix):], audience)
-    assignments = configured_assignments()
     if (
-        assignments.get(result["assignment"]) != result["assignment_sha"].lower()
+        result["assignment"] not in configured_values("ALLOWED_ASSIGNMENTS")
         or claims["job_workflow_sha"] not in configured_values("ALLOWED_WORKFLOW_SHAS")
         or claims["job_workflow_ref"] != workflow_ref
         or claims["repository"] != result["repository"]
