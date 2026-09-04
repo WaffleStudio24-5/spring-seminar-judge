@@ -61,13 +61,13 @@ Production 환경변수를 설정합니다.
 SUPABASE_URL=https://<project-ref>.supabase.co
 SUPABASE_SECRET_KEY=sb_secret_...
 OIDC_AUDIENCE=seminar-judge
-ALLOWED_REPOSITORIES=Tapha-K/spring-seminar-upstream-fork
+ALLOWED_SOURCE_REPOSITORY=WaffleStudio24-5/spring-seminar-upstream
 ALLOWED_ASSIGNMENTS=main=af730b224a94ec2540d2e51f95cbd3d0b92e3b6f
 ALLOWED_WORKFLOW_REF=WaffleStudio24-5/spring-seminar-judge/.github/workflows/grade.yml@refs/heads/main
 ALLOWED_WORKFLOW_SHAS=<배포한 judge commit SHA>
 ```
 
-여러 저장소나 workflow SHA는 쉼표로 구분합니다. `ALLOWED_WORKFLOW_SHAS`에는 reusable workflow 파일을 포함한 judge 커밋 SHA를 넣습니다.
+`ALLOWED_SOURCE_REPOSITORY`에는 학생들이 fork할 원본 저장소를 넣습니다. 제출 시 GitHub API에서 실제 fork 관계를 자동 검증하므로 학생 저장소를 하나씩 등록할 필요가 없습니다. 공개 API 제한에 걸릴 정도로 제출이 많다면 metadata 읽기 권한만 가진 fine-grained token을 `GITHUB_API_TOKEN`으로 추가할 수 있습니다. 여러 workflow SHA는 쉼표로 구분하며, `ALLOWED_WORKFLOW_SHAS`에는 reusable workflow 파일을 포함한 judge 커밋 SHA를 넣습니다.
 
 배포 후 API 주소가 다음과 같이 생깁니다.
 
@@ -88,7 +88,7 @@ python3 -m pip install -r requirements.txt
 SUPABASE_URL=https://<project-ref>.supabase.co \
 SUPABASE_SECRET_KEY=sb_secret_... \
 OIDC_AUDIENCE=seminar-judge \
-ALLOWED_REPOSITORIES=student/assignment \
+ALLOWED_SOURCE_REPOSITORY=WaffleStudio24-5/spring-seminar-upstream \
 ALLOWED_ASSIGNMENTS=assignment-1-v1=0123456789abcdef0123456789abcdef01234567 \
 ALLOWED_WORKFLOW_REF=WaffleStudio24-5/spring-seminar-judge/.github/workflows/grade.yml@refs/heads/main \
 ALLOWED_WORKFLOW_SHAS=<허용할 judge workflow commit SHA> \

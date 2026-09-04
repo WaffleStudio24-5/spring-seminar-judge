@@ -104,21 +104,24 @@ class ServerTest(unittest.TestCase):
 class AuthenticationTest(unittest.TestCase):
     environment = {
         "OIDC_AUDIENCE": "seminar-judge",
-        "ALLOWED_REPOSITORIES": "student/assignment",
+        "ALLOWED_SOURCE_REPOSITORY": "school/assignment",
         "ALLOWED_ASSIGNMENTS": f"assignment-1-v1={COMMIT}",
         "ALLOWED_WORKFLOW_REF": WORKFLOW_REF,
         "ALLOWED_WORKFLOW_SHAS": WORKFLOW_SHA,
     }
 
     @patch.dict("os.environ", environment, clear=True)
+    @patch("server.verify_repository_source")
     @patch("server.decode_oidc_token")
-    def test_matches_token_to_result(self, decode_oidc_token):
+    def test_matches_token_to_result(self, decode_oidc_token, verify_repository_source):
         decode_oidc_token.return_value = oidc_claims()
         server.authenticate_request("Bearer token", server.validate_request(result_payload()))
+        verify_repository_source.assert_called_once_with("student/assignment")
 
     @patch.dict("os.environ", environment, clear=True)
+    @patch("server.verify_repository_source")
     @patch("server.decode_oidc_token")
-    def test_rejects_a_different_workflow_commit(self, decode_oidc_token):
+    def test_rejects_a_different_workflow_commit(self, decode_oidc_token, _verify_repository_source):
         claims = oidc_claims()
         claims["job_workflow_sha"] = "f" * 40
         decode_oidc_token.return_value = claims
@@ -145,6 +148,43 @@ class AuthenticationTest(unittest.TestCase):
             decoded = server.decode_oidc_token(token, "seminar-judge")
 
         self.assertEqual(WORKFLOW_SHA, decoded["job_workflow_sha"])
+
+
+class RepositoryVerificationTest(unittest.TestCase):
+    @patch.dict(
+        "os.environ",
+        {"ALLOWED_SOURCE_REPOSITORY": "school/assignment"},
+        clear=True,
+    )
+    @patch("server.urlopen")
+    def test_accepts_a_fork_from_the_allowed_source(self, open_url):
+        response = MagicMock()
+        response.__enter__.return_value.read.return_value = json.dumps(
+            {
+                "fork": True,
+                "source": {"full_name": "school/assignment"},
+            }
+        ).encode()
+        open_url.return_value = response
+
+        server.verify_repository_source("student/assignment")
+
+        request = open_url.call_args.args[0]
+        self.assertEqual("https://api.github.com/repos/student/assignment", request.full_url)
+
+    @patch.dict(
+        "os.environ",
+        {"ALLOWED_SOURCE_REPOSITORY": "school/assignment"},
+        clear=True,
+    )
+    @patch("server.urlopen")
+    def test_rejects_an_unrelated_repository(self, open_url):
+        response = MagicMock()
+        response.__enter__.return_value.read.return_value = b'{"fork":false}'
+        open_url.return_value = response
+
+        with self.assertRaises(PermissionError):
+            server.verify_repository_source("student/assignment")
 
 
 class StorageTest(unittest.TestCase):

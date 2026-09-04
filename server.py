@@ -110,6 +110,34 @@ def configured_assignments():
     return assignments
 
 
+def verify_repository_source(repository):
+    source_repository = os.environ.get("ALLOWED_SOURCE_REPOSITORY", "")
+    if not REPOSITORY_PATTERN.fullmatch(source_repository):
+        raise RuntimeError("ALLOWED_SOURCE_REPOSITORY must be configured")
+
+    headers = {
+        "Accept": "application/vnd.github+json",
+        "User-Agent": "spring-seminar-judge",
+        "X-GitHub-Api-Version": "2022-11-28",
+    }
+    if token := os.environ.get("GITHUB_API_TOKEN"):
+        headers["Authorization"] = f"Bearer {token}"
+
+    request = Request(f"https://api.github.com/repos/{repository}", headers=headers)
+    try:
+        with urlopen(request, timeout=10) as response:
+            metadata = json.loads(response.read())
+    except (OSError, json.JSONDecodeError) as error:
+        raise RuntimeError("failed to verify repository") from error
+
+    if (
+        not metadata.get("fork")
+        or metadata.get("source", {}).get("full_name", "").lower()
+        != source_repository.lower()
+    ):
+        raise PermissionError("repository is not an allowed fork")
+
+
 def authenticate_request(authorization, result):
     audience = os.environ.get("OIDC_AUDIENCE")
     workflow_ref = os.environ.get("ALLOWED_WORKFLOW_REF")
@@ -123,8 +151,7 @@ def authenticate_request(authorization, result):
     claims = decode_oidc_token(authorization[len(prefix):], audience)
     assignments = configured_assignments()
     if (
-        result["repository"] not in configured_values("ALLOWED_REPOSITORIES")
-        or assignments.get(result["assignment"]) != result["assignment_sha"].lower()
+        assignments.get(result["assignment"]) != result["assignment_sha"].lower()
         or claims["job_workflow_sha"] not in configured_values("ALLOWED_WORKFLOW_SHAS")
         or claims["job_workflow_ref"] != workflow_ref
         or claims["repository"] != result["repository"]
@@ -138,6 +165,8 @@ def authenticate_request(authorization, result):
         or claims["runner_environment"] != "github-hosted"
     ):
         raise PermissionError("token claims do not match the grading result")
+
+    verify_repository_source(result["repository"])
 
 
 def save_result(result):
