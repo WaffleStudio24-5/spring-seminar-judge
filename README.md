@@ -114,6 +114,12 @@ Authorization: Bearer <GitHub Actions OIDC token>
 
 API는 GitHub 서명과 함께 repository, commit, run ID, `job_workflow_ref`, `job_workflow_sha`를 검증합니다. 허용 목록은 쉼표로 구분하며 기본적으로 `main` push만 허용합니다. 브랜치는 `ALLOWED_REF`로 변경할 수 있습니다.
 
+`GET /api/results`는 최근 결과 100개를 공개 JSON으로 반환합니다.
+
+## 결과 대시보드 배포
+
+같은 저장소를 Vercel에 프로젝트 하나 더 import하고 Root Directory를 `dashboard`로 설정합니다. Framework Preset은 `Other`로 두고 Build Command는 비워 둡니다. `dashboard/index.html`이 Result API를 읽어 최신 결과를 표시합니다.
+
 로컬에서는 같은 환경변수를 지정하고 `python3 server.py`를 실행하면 `http://127.0.0.1:8080/results`에서 확인할 수 있습니다.
 
 ## 전체 채점 흐름

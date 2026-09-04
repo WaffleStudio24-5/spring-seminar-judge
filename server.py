@@ -3,6 +3,7 @@ import json
 import os
 import re
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from urllib.parse import urlencode
 from urllib.request import Request, urlopen
 
 import jwt
@@ -171,7 +172,43 @@ def save_result(result):
             raise RuntimeError("Supabase rejected the result")
 
 
+def load_results():
+    supabase_url = os.environ.get("SUPABASE_URL", "").rstrip("/")
+    secret_key = os.environ.get("SUPABASE_SECRET_KEY")
+    if not supabase_url.startswith("https://") or not secret_key:
+        raise RuntimeError("SUPABASE_URL and SUPABASE_SECRET_KEY must be configured")
+
+    query = urlencode(
+        {
+            "select": "repository,assignment,commit_sha,status,run_number,run_attempt,graded_at",
+            "order": "graded_at.desc",
+            "limit": 100,
+        }
+    )
+    request = Request(
+        f"{supabase_url}/rest/v1/results?{query}",
+        headers={"apikey": secret_key},
+    )
+    with urlopen(request, timeout=10) as response:
+        if response.status != 200:
+            raise RuntimeError("Supabase rejected the query")
+        return json.loads(response.read())
+
+
 class ResultHandler(BaseHTTPRequestHandler):
+    def do_GET(self):
+        if self.path not in ("/results", "/api/results"):
+            self.send_json(404, {"error": "not found"})
+            return
+
+        try:
+            results = load_results()
+        except (OSError, RuntimeError, json.JSONDecodeError):
+            self.send_json(500, {"error": "failed to load results"})
+            return
+
+        self.send_json(200, {"results": results})
+
     def do_POST(self):
         if self.path not in ("/results", "/api/results"):
             self.send_json(404, {"error": "not found"})
@@ -207,6 +244,7 @@ class ResultHandler(BaseHTTPRequestHandler):
         data = json.dumps(body).encode()
         self.send_response(status)
         self.send_header("Content-Type", "application/json")
+        self.send_header("Access-Control-Allow-Origin", "*")
         self.send_header("Content-Length", str(len(data)))
         self.end_headers()
         self.wfile.write(data)

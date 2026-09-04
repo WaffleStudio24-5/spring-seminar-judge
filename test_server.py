@@ -53,6 +53,7 @@ class ServerTest(unittest.TestCase):
     def setUp(self):
         patch("server.authenticate_request").start()
         self.save_result = patch("server.save_result").start()
+        self.load_results = patch("server.load_results", return_value=[{"status": "PASSED"}]).start()
         self.addCleanup(patch.stopall)
         self.httpd = HTTPServer(("127.0.0.1", 0), server.ResultHandler)
         self.thread = threading.Thread(target=self.httpd.serve_forever)
@@ -76,6 +77,10 @@ class ServerTest(unittest.TestCase):
             response = error
         return response.status, json.loads(response.read())
 
+    def get(self):
+        response = urlopen(f"http://127.0.0.1:{self.httpd.server_port}/results")
+        return response.status, response.headers, json.loads(response.read())
+
     def test_records_result(self):
         self.assertEqual((201, {"recorded": True}), self.post(result_payload()))
         self.save_result.assert_called_once()
@@ -87,6 +92,13 @@ class ServerTest(unittest.TestCase):
         status, body = self.post(payload)
         self.assertEqual(400, status)
         self.assertIn("status", body["error"])
+
+    def test_lists_results_for_dashboard(self):
+        status, headers, body = self.get()
+
+        self.assertEqual(200, status)
+        self.assertEqual("*", headers["Access-Control-Allow-Origin"])
+        self.assertEqual({"results": [{"status": "PASSED"}]}, body)
 
 
 class AuthenticationTest(unittest.TestCase):
@@ -153,6 +165,25 @@ class StorageTest(unittest.TestCase):
         self.assertEqual("secret", request.get_header("Apikey"))
         self.assertIn("on_conflict=repository,assignment,workflow_run_id,run_attempt", request.full_url)
         self.assertEqual(123, json.loads(request.data)["workflow_run_id"])
+
+    @patch.dict(
+        "os.environ",
+        {"SUPABASE_URL": "https://project.supabase.co", "SUPABASE_SECRET_KEY": "secret"},
+        clear=True,
+    )
+    @patch("server.urlopen")
+    def test_loads_latest_results_with_secret_key(self, open_url):
+        response = MagicMock()
+        response.__enter__.return_value.status = 200
+        response.__enter__.return_value.read.return_value = b'[{"status":"PASSED"}]'
+        open_url.return_value = response
+
+        self.assertEqual([{"status": "PASSED"}], server.load_results())
+
+        request = open_url.call_args.args[0]
+        self.assertEqual("secret", request.get_header("Apikey"))
+        self.assertIn("order=graded_at.desc", request.full_url)
+        self.assertIn("limit=100", request.full_url)
 
 
 if __name__ == "__main__":

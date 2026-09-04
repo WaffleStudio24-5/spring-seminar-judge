@@ -1,0 +1,123 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light">
+  <title>Spring Seminar Judge</title>
+  <style>
+    :root { color: #19221c; background: #f3f1e9; font-family: Inter, ui-sans-serif, system-ui, sans-serif; }
+    * { box-sizing: border-box; }
+    body { margin: 0; }
+    main { width: min(1100px, calc(100% - 32px)); margin: 0 auto; padding: 64px 0; }
+    header { display: flex; align-items: end; justify-content: space-between; gap: 24px; margin-bottom: 32px; }
+    h1 { margin: 0; font-size: clamp(2rem, 6vw, 4.5rem); line-height: .95; letter-spacing: -.06em; }
+    .eyebrow { margin: 0 0 12px; color: #54705d; font-size: .75rem; font-weight: 800; letter-spacing: .16em; text-transform: uppercase; }
+    button { border: 1px solid #19221c; border-radius: 999px; padding: 10px 16px; color: inherit; background: transparent; font: inherit; font-weight: 700; white-space: nowrap; cursor: pointer; }
+    button:hover { color: #f3f1e9; background: #19221c; }
+    button:focus-visible { outline: 3px solid #e0903d; outline-offset: 3px; }
+    .summary { display: grid; grid-template-columns: repeat(3, 1fr); gap: 1px; overflow: hidden; margin-bottom: 20px; border: 1px solid #ccd1c9; border-radius: 16px; background: #ccd1c9; }
+    .summary div { padding: 20px; background: #fff; }
+    .summary strong { display: block; margin-top: 4px; font: 700 2rem/1 ui-monospace, monospace; }
+    .summary span { color: #657069; font-size: .8rem; font-weight: 700; text-transform: uppercase; }
+    .panel { overflow: hidden; border: 1px solid #ccd1c9; border-radius: 16px; background: #fff; box-shadow: 0 18px 50px rgb(25 34 28 / 7%); }
+    table { width: 100%; border-collapse: collapse; }
+    th, td { padding: 16px 18px; border-bottom: 1px solid #e5e7e2; text-align: left; }
+    th { color: #657069; font-size: .7rem; letter-spacing: .1em; text-transform: uppercase; }
+    tbody tr:last-child td { border-bottom: 0; }
+    code { font-size: .78rem; }
+    .status { display: inline-block; border-radius: 999px; padding: 5px 9px; font-size: .72rem; font-weight: 800; }
+    .PASSED { color: #17633a; background: #dff3e6; }
+    .FAILED, .ERROR { color: #8a2f2a; background: #fae3df; }
+    .message { padding: 48px 20px; color: #657069; text-align: center; }
+    footer { margin-top: 16px; color: #657069; font-size: .78rem; }
+    @media (max-width: 720px) {
+      main { padding: 40px 0; }
+      header { align-items: start; }
+      thead { display: none; }
+      tr { display: grid; grid-template-columns: 1fr auto; padding: 14px 16px; border-bottom: 1px solid #e5e7e2; }
+      td { padding: 5px 0; border: 0; }
+      td:nth-child(1), td:nth-child(4) { grid-column: 1; }
+      td:nth-child(2), td:nth-child(5) { grid-column: 1; color: #657069; font-size: .85rem; }
+      td:nth-child(3) { grid-area: 1 / 2 / 3 / 3; align-self: start; justify-self: end; }
+      td:nth-child(5)::before { content: "run "; }
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <header>
+      <div>
+        <p class="eyebrow">Waffle Studio · Spring Seminar</p>
+        <h1>Judge results</h1>
+      </div>
+      <button id="refresh" type="button">새로고침</button>
+    </header>
+
+    <section class="summary" aria-label="채점 요약">
+      <div><span>Passed</span><strong id="passed">—</strong></div>
+      <div><span>Failed</span><strong id="failed">—</strong></div>
+      <div><span>Total</span><strong id="total">—</strong></div>
+    </section>
+
+    <section class="panel" aria-live="polite">
+      <div id="message" class="message">결과를 불러오는 중…</div>
+      <table id="results" hidden>
+        <thead><tr><th>Repository</th><th>Assignment</th><th>Status</th><th>Graded at</th><th>Run</th></tr></thead>
+        <tbody></tbody>
+      </table>
+    </section>
+    <footer id="updated"></footer>
+  </main>
+
+  <script>
+    const API_URL = "https://spring-seminar-judge.vercel.app/api/results";
+    const table = document.querySelector("#results");
+    const message = document.querySelector("#message");
+
+    function cell(row, value, className) {
+      const element = document.createElement("td");
+      element.textContent = value;
+      if (className) element.className = className;
+      row.append(element);
+      return element;
+    }
+
+    async function load() {
+      table.hidden = true;
+      message.hidden = false;
+      message.textContent = "결과를 불러오는 중…";
+      try {
+        const response = await fetch(API_URL);
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        const { results } = await response.json();
+        const body = table.querySelector("tbody");
+        body.replaceChildren();
+
+        for (const result of results) {
+          const row = document.createElement("tr");
+          cell(row, result.repository);
+          cell(row, result.assignment);
+          cell(row, result.status, `status ${result.status}`);
+          cell(row, new Date(result.graded_at).toLocaleString("ko-KR"));
+          cell(row, `#${result.run_number}.${result.run_attempt}`);
+          body.append(row);
+        }
+
+        document.querySelector("#passed").textContent = results.filter(result => result.status === "PASSED").length;
+        document.querySelector("#failed").textContent = results.filter(result => result.status !== "PASSED").length;
+        document.querySelector("#total").textContent = results.length;
+        message.hidden = results.length > 0;
+        message.textContent = "아직 기록된 채점 결과가 없습니다.";
+        table.hidden = results.length === 0;
+        document.querySelector("#updated").textContent = `최근 갱신 ${new Date().toLocaleString("ko-KR")}`;
+      } catch (error) {
+        message.textContent = "결과를 불러오지 못했습니다. 잠시 후 다시 시도해 주세요.";
+      }
+    }
+
+    document.querySelector("#refresh").addEventListener("click", load);
+    load();
+  </script>
+</body>
+</html>
