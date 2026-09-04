@@ -77,8 +77,14 @@
 
     function cell(row, value, className) {
       const element = document.createElement("td");
-      element.textContent = value;
-      if (className) element.className = className;
+      if (className) {
+        const badge = document.createElement("span");
+        badge.className = className;
+        badge.textContent = value;
+        element.append(badge);
+      } else {
+        element.textContent = value;
+      }
       row.append(element);
       return element;
     }
