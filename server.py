@@ -2,6 +2,7 @@
 import json
 import os
 import re
+from datetime import datetime, timezone
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import urlencode
@@ -163,15 +164,16 @@ def save_result(result):
         "workflow_run_id": result["run_id"],
         "run_number": result["run_number"],
         "run_attempt": result["run_attempt"],
+        "graded_at": datetime.now(timezone.utc).isoformat(),
     }
     request = Request(
         f"{supabase_url}/rest/v1/results"
-        "?on_conflict=repository,assignment,workflow_run_id,run_attempt",
+        "?on_conflict=repository,assignment",
         data=json.dumps(row).encode(),
         headers={
             "apikey": secret_key,
             "Content-Type": "application/json",
-            "Prefer": "resolution=ignore-duplicates,return=minimal",
+            "Prefer": "resolution=merge-duplicates,return=minimal",
         },
         method="POST",
     )

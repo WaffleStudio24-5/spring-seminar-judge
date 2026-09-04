@@ -213,8 +213,11 @@ class StorageTest(unittest.TestCase):
 
         request = open_url.call_args.args[0]
         self.assertEqual("secret", request.get_header("Apikey"))
-        self.assertIn("on_conflict=repository,assignment,workflow_run_id,run_attempt", request.full_url)
-        self.assertEqual(123, json.loads(request.data)["workflow_run_id"])
+        self.assertIn("on_conflict=repository,assignment", request.full_url)
+        self.assertEqual("resolution=merge-duplicates,return=minimal", request.get_header("Prefer"))
+        row = json.loads(request.data)
+        self.assertEqual(123, row["workflow_run_id"])
+        self.assertIn("+00:00", row["graded_at"])
 
     @patch.dict(
         "os.environ",

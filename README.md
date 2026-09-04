@@ -37,9 +37,8 @@ UPSTREAM_REPOSITORY=/path/to/upstream UPSTREAM_REF=<commit> ./grade.sh <repo> <c
 
 ### 1. Supabase
 
-Supabase 프로젝트를 만든 뒤 SQL Editor에서
-[`supabase/migrations/20260902000000_create_results.sql`](supabase/migrations/20260902000000_create_results.sql)을 실행합니다.
-이 테이블은 같은 workflow run/attempt가 재전송돼도 한 행만 저장하고, RLS와 권한 회수로 공개 API 키 접근을 막습니다.
+Supabase 프로젝트를 만든 뒤 SQL Editor에서 [`supabase/migrations`](supabase/migrations)의 SQL 파일을 이름순으로 실행합니다.
+테이블은 저장소와 과제마다 최신 결과 한 행만 유지하며, RLS와 권한 회수로 공개 API 키 접근을 막습니다.
 
 Dashboard의 **Project Settings → API Keys**에서 다음 값을 준비합니다.
 
