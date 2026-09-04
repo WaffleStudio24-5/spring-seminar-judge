@@ -14,7 +14,6 @@ from cryptography.hazmat.primitives.asymmetric import rsa
 import server
 
 COMMIT = "0123456789abcdef0123456789abcdef01234567"
-WORKFLOW_SHA = "a" * 40
 WORKFLOW_REF = (
     "WaffleStudio24-5/spring-seminar-judge/.github/workflows/grade.yml@refs/heads/main"
 )
@@ -24,7 +23,7 @@ def result_payload():
     return {
         "repository": "student/assignment",
         "commit": COMMIT,
-        "assignment": "assignment-1-v1",
+        "assignment": "main",
         "assignment_sha": COMMIT,
         "status": "PASSED",
         "run_id": "123",
@@ -42,7 +41,6 @@ def oidc_claims():
         "repository_visibility": "public",
         "runner_environment": "github-hosted",
         "job_workflow_ref": WORKFLOW_REF,
-        "job_workflow_sha": WORKFLOW_SHA,
         "run_id": "123",
         "run_number": "4",
         "run_attempt": "1",
@@ -105,9 +103,7 @@ class AuthenticationTest(unittest.TestCase):
     environment = {
         "OIDC_AUDIENCE": "seminar-judge",
         "ALLOWED_SOURCE_REPOSITORY": "school/assignment",
-        "ALLOWED_ASSIGNMENTS": "assignment-1-v1",
         "ALLOWED_WORKFLOW_REF": WORKFLOW_REF,
-        "ALLOWED_WORKFLOW_SHAS": WORKFLOW_SHA,
     }
 
     @patch.dict("os.environ", environment, clear=True)
@@ -121,24 +117,20 @@ class AuthenticationTest(unittest.TestCase):
     @patch.dict("os.environ", environment, clear=True)
     @patch("server.verify_repository_source")
     @patch("server.decode_oidc_token")
-    def test_rejects_a_different_workflow_commit(self, decode_oidc_token, _verify_repository_source):
+    def test_rejects_a_different_workflow(self, decode_oidc_token, _verify_repository_source):
         claims = oidc_claims()
-        claims["job_workflow_sha"] = "f" * 40
+        claims["job_workflow_ref"] = "attacker/judge/.github/workflows/grade.yml@refs/heads/main"
         decode_oidc_token.return_value = claims
 
         with self.assertRaises(PermissionError):
             server.authenticate_request("Bearer token", server.validate_request(result_payload()))
 
-    @patch.dict("os.environ", environment, clear=True)
-    @patch("server.verify_repository_source")
-    @patch("server.decode_oidc_token")
-    def test_rejects_an_unknown_assignment(self, decode_oidc_token, _verify_repository_source):
-        decode_oidc_token.return_value = oidc_claims()
+    def test_rejects_an_unknown_assignment(self):
         payload = result_payload()
         payload["assignment"] = "unknown"
 
-        with self.assertRaises(PermissionError):
-            server.authenticate_request("Bearer token", server.validate_request(payload))
+        with self.assertRaises(ValueError):
+            server.validate_request(payload)
 
     def test_verifies_token_signature_and_required_claims(self):
         private_key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
@@ -158,7 +150,7 @@ class AuthenticationTest(unittest.TestCase):
         ):
             decoded = server.decode_oidc_token(token, "seminar-judge")
 
-        self.assertEqual(WORKFLOW_SHA, decoded["job_workflow_sha"])
+        self.assertEqual(WORKFLOW_REF, decoded["job_workflow_ref"])
 
 
 class RepositoryVerificationTest(unittest.TestCase):

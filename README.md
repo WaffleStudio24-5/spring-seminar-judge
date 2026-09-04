@@ -10,7 +10,6 @@ jobs:
   grade:
     uses: WaffleStudio24-5/spring-seminar-judge/.github/workflows/grade.yml@main
     with:
-      assignment: main
       result_url: https://<vercel-project>.vercel.app/api
 ```
 
@@ -61,12 +60,10 @@ SUPABASE_URL=https://<project-ref>.supabase.co
 SUPABASE_SECRET_KEY=sb_secret_...
 OIDC_AUDIENCE=seminar-judge
 ALLOWED_SOURCE_REPOSITORY=WaffleStudio24-5/spring-seminar-upstream
-ALLOWED_ASSIGNMENTS=main
 ALLOWED_WORKFLOW_REF=WaffleStudio24-5/spring-seminar-judge/.github/workflows/grade.yml@refs/heads/main
-ALLOWED_WORKFLOW_SHAS=<배포한 judge commit SHA>
 ```
 
-`ALLOWED_SOURCE_REPOSITORY`에는 학생들이 fork할 원본 저장소를 넣습니다. 제출 시 GitHub API에서 실제 fork 관계를 자동 검증하므로 학생 저장소를 하나씩 등록할 필요가 없습니다. 공개 API 제한에 걸릴 정도로 제출이 많다면 metadata 읽기 권한만 가진 fine-grained token을 `GITHUB_API_TOKEN`으로 추가할 수 있습니다. 여러 workflow SHA는 쉼표로 구분하며, `ALLOWED_WORKFLOW_SHAS`에는 reusable workflow 파일을 포함한 judge 커밋 SHA를 넣습니다.
+`ALLOWED_SOURCE_REPOSITORY`에는 학생들이 fork할 원본 저장소를 넣습니다. 제출 시 GitHub API에서 실제 fork 관계를 자동 검증하므로 학생 저장소를 하나씩 등록할 필요가 없습니다. 공개 API 제한에 걸릴 정도로 제출이 많다면 metadata 읽기 권한만 가진 fine-grained token을 `GITHUB_API_TOKEN`으로 추가할 수 있습니다.
 
 배포 후 API 주소가 다음과 같이 생깁니다.
 
@@ -88,9 +85,7 @@ SUPABASE_URL=https://<project-ref>.supabase.co \
 SUPABASE_SECRET_KEY=sb_secret_... \
 OIDC_AUDIENCE=seminar-judge \
 ALLOWED_SOURCE_REPOSITORY=WaffleStudio24-5/spring-seminar-upstream \
-ALLOWED_ASSIGNMENTS=assignment-1-v1 \
 ALLOWED_WORKFLOW_REF=WaffleStudio24-5/spring-seminar-judge/.github/workflows/grade.yml@refs/heads/main \
-ALLOWED_WORKFLOW_SHAS=<허용할 judge workflow commit SHA> \
 python3 server.py
 ```
 
@@ -102,7 +97,7 @@ Authorization: Bearer <GitHub Actions OIDC token>
 {
   "repository": "user/assignment",
   "commit": "0123456789abcdef0123456789abcdef01234567",
-  "assignment": "assignment-1-v1",
+  "assignment": "main",
   "assignment_sha": "0123456789abcdef0123456789abcdef01234567",
   "status": "PASSED",
   "run_id": "123",
@@ -111,7 +106,7 @@ Authorization: Bearer <GitHub Actions OIDC token>
 }
 ```
 
-API는 GitHub 서명과 함께 repository, commit, run ID, `job_workflow_ref`, `job_workflow_sha`를 검증합니다. 허용 목록은 쉼표로 구분하며 기본적으로 `main` push만 허용합니다. 브랜치는 `ALLOWED_REF`로 변경할 수 있습니다.
+API는 GitHub 서명과 함께 repository, commit, run ID, `job_workflow_ref`를 검증합니다. 기본적으로 `main` push만 허용하며 브랜치는 `ALLOWED_REF`로 변경할 수 있습니다.
 
 `GET /api/results`는 최근 결과 100개를 공개 JSON으로 반환합니다.
 

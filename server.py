@@ -13,6 +13,7 @@ COMMIT_PATTERN = re.compile(r"[0-9a-fA-F]{40}")
 REPOSITORY_PATTERN = re.compile(r"[A-Za-z0-9_.-]{1,100}/[A-Za-z0-9_.-]{1,100}")
 ASSIGNMENT_PATTERN = re.compile(r"[A-Za-z0-9._-]{1,100}")
 RESULT_STATUSES = {"PASSED", "FAILED", "ERROR"}
+ASSIGNMENT = "main"
 OIDC_ISSUER = "https://token.actions.githubusercontent.com"
 OIDC_JWKS = jwt.PyJWKClient(f"{OIDC_ISSUER}/.well-known/jwks")
 
@@ -50,10 +51,8 @@ def validate_request(payload):
         raise ValueError("repository must be an owner/name pair")
     if not isinstance(result["commit"], str) or not COMMIT_PATTERN.fullmatch(result["commit"]):
         raise ValueError("commit must be a 40-character SHA")
-    if not isinstance(result["assignment"], str) or not ASSIGNMENT_PATTERN.fullmatch(
-        result["assignment"]
-    ):
-        raise ValueError("assignment must be a name")
+    if result["assignment"] != ASSIGNMENT:
+        raise ValueError(f"assignment must be {ASSIGNMENT}")
     if not isinstance(result["assignment_sha"], str) or not COMMIT_PATTERN.fullmatch(
         result["assignment_sha"]
     ):
@@ -73,7 +72,6 @@ def decode_oidc_token(token, audience):
         "iat",
         "iss",
         "job_workflow_ref",
-        "job_workflow_sha",
         "ref",
         "repository",
         "repository_visibility",
@@ -91,13 +89,6 @@ def decode_oidc_token(token, audience):
         issuer=OIDC_ISSUER,
         options={"require": required_claims},
     )
-
-
-def configured_values(name):
-    values = {value.strip() for value in os.environ.get(name, "").split(",") if value.strip()}
-    if not values:
-        raise RuntimeError(f"{name} must be configured")
-    return values
 
 
 def verify_repository_source(repository):
@@ -140,9 +131,7 @@ def authenticate_request(authorization, result):
 
     claims = decode_oidc_token(authorization[len(prefix):], audience)
     if (
-        result["assignment"] not in configured_values("ALLOWED_ASSIGNMENTS")
-        or claims["job_workflow_sha"] not in configured_values("ALLOWED_WORKFLOW_SHAS")
-        or claims["job_workflow_ref"] != workflow_ref
+        claims["job_workflow_ref"] != workflow_ref
         or claims["repository"] != result["repository"]
         or claims["sha"].lower() != result["commit"].lower()
         or positive_int(claims["run_id"], "run_id") != result["run_id"]

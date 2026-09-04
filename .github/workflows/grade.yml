@@ -3,10 +3,6 @@ name: Grade submission
 on:
   workflow_call:
     inputs:
-      assignment:
-        description: Assignment name
-        required: true
-        type: string
       result_url:
         description: Result API base URL
         required: false
@@ -63,7 +59,7 @@ jobs:
     steps:
       - name: Report result
         env:
-          ASSIGNMENT: ${{ inputs.assignment }}
+          ASSIGNMENT: main
           ASSIGNMENT_SHA: ${{ needs.grade.outputs.assignment_sha }}
           COMMIT_SHA: ${{ github.sha }}
           GRADE_RESULT: ${{ needs.grade.result }}
