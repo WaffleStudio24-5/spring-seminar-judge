@@ -6,6 +6,7 @@ from http.server import HTTPServer
 from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 from urllib.error import HTTPError
+from urllib.parse import parse_qs, urlsplit
 from urllib.request import Request, urlopen
 
 import jwt
@@ -15,7 +16,7 @@ import server
 
 COMMIT = "0123456789abcdef0123456789abcdef01234567"
 WORKFLOW_REF = (
-    "WaffleStudio24-5/spring-seminar-judge/.github/workflows/grade.yml@refs/heads/main"
+    "WaffleStudio24-5/spring-seminar-judge/.github/workflows/grade-assignment.yml@refs/heads/main"
 )
 
 
@@ -23,7 +24,7 @@ def result_payload():
     return {
         "repository": "student/assignment",
         "commit": COMMIT,
-        "assignment": "main",
+        "assignment": "v1",
         "assignment_sha": COMMIT,
         "status": "PASSED",
         "run_id": "123",
@@ -75,8 +76,11 @@ class ServerTest(unittest.TestCase):
             response = error
         return response.status, json.loads(response.read())
 
-    def get(self):
-        response = urlopen(f"http://127.0.0.1:{self.httpd.server_port}/results")
+    def get(self, query=""):
+        try:
+            response = urlopen(f"http://127.0.0.1:{self.httpd.server_port}/api/results{query}")
+        except HTTPError as error:
+            response = error
         return response.status, response.headers, json.loads(response.read())
 
     def test_serves_dashboard_at_root(self):
@@ -104,6 +108,23 @@ class ServerTest(unittest.TestCase):
         self.assertEqual(200, status)
         self.assertEqual("*", headers["Access-Control-Allow-Origin"])
         self.assertEqual({"results": [{"status": "PASSED"}]}, body)
+
+    def test_filters_each_assignment_and_legacy_results(self):
+        for assignment in ["v1", "v2", "v3", "v4", "v5", "main"]:
+            with self.subTest(assignment=assignment):
+                self.assertEqual(200, self.get(f"?assignment={assignment}")[0])
+                self.load_results.assert_called_with(assignment)
+
+    def test_rejects_invalid_assignment_filters_without_querying_storage(self):
+        for query in ["?assignment=", "?assignment=v6", "?assignment=v2.1",
+                      "?assignment=v1&assignment=v2", "?assignment=eq.v1"]:
+            with self.subTest(query=query):
+                self.assertEqual(400, self.get(query)[0])
+        self.load_results.assert_not_called()
+
+    def test_invalid_storage_json_is_server_error(self):
+        self.load_results.side_effect = json.JSONDecodeError("invalid", "", 0)
+        self.assertEqual(500, self.get("?assignment=v1")[0])
 
 
 class AuthenticationTest(unittest.TestCase):
@@ -138,6 +159,14 @@ class AuthenticationTest(unittest.TestCase):
 
         with self.assertRaises(ValueError):
             server.validate_request(payload)
+
+    def test_accepts_five_assignments_but_not_revision_names_or_legacy_writes(self):
+        for assignment in ["v1", "v2", "v3", "v4", "v5"]:
+            payload = result_payload() | {"assignment": assignment}
+            self.assertEqual(assignment, server.validate_request(payload)["assignment"])
+        for assignment in ["main", "v0", "v6", "v2.1", "assignment-v2", None, []]:
+            with self.subTest(assignment=assignment), self.assertRaises(ValueError):
+                server.validate_request(result_payload() | {"assignment": assignment})
 
     def test_verifies_token_signature_and_required_claims(self):
         private_key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
@@ -217,6 +246,8 @@ class StorageTest(unittest.TestCase):
         self.assertEqual("resolution=merge-duplicates,return=minimal", request.get_header("Prefer"))
         row = json.loads(request.data)
         self.assertEqual(123, row["workflow_run_id"])
+        self.assertEqual("v1", row["assignment"])
+        self.assertEqual(COMMIT, row["assignment_sha"])
         self.assertIn("+00:00", row["graded_at"])
 
     @patch.dict(
@@ -237,6 +268,11 @@ class StorageTest(unittest.TestCase):
         self.assertEqual("secret", request.get_header("Apikey"))
         self.assertIn("order=graded_at.desc", request.full_url)
         self.assertIn("limit=100", request.full_url)
+
+        server.load_results("v2")
+        query = parse_qs(urlsplit(open_url.call_args.args[0].full_url).query)
+        self.assertEqual(["eq.v2"], query["assignment"])
+        self.assertIn("assignment_sha", query["select"][0])
 
 
 if __name__ == "__main__":

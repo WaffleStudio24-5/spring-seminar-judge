@@ -16,6 +16,8 @@
     button { border: 1px solid #19221c; border-radius: 999px; padding: 10px 16px; color: inherit; background: transparent; font: inherit; font-weight: 700; white-space: nowrap; cursor: pointer; }
     button:hover { color: #f3f1e9; background: #19221c; }
     button:focus-visible { outline: 3px solid #e0903d; outline-offset: 3px; }
+    .assignment-filter { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 20px; }
+    .assignment-filter button[aria-pressed="true"] { color: #f3f1e9; background: #19221c; }
     .summary { display: grid; grid-template-columns: repeat(3, 1fr); gap: 1px; overflow: hidden; margin-bottom: 20px; border: 1px solid #ccd1c9; border-radius: 16px; background: #ccd1c9; }
     .summary div { padding: 20px; background: #fff; }
     .summary strong { display: block; margin-top: 4px; font: 700 2rem/1 ui-monospace, monospace; }
@@ -54,7 +56,15 @@
       <button id="refresh" type="button">새로고침</button>
     </header>
 
-    <section class="summary" aria-label="채점 요약">
+    <div class="assignment-filter" role="group" aria-label="과제별 결과 보기">
+      <button type="button" value="v1" aria-pressed="true" aria-controls="results">과제 v1</button>
+      <button type="button" value="v2" aria-pressed="false" aria-controls="results">과제 v2</button>
+      <button type="button" value="v3" aria-pressed="false" aria-controls="results">과제 v3</button>
+      <button type="button" value="v4" aria-pressed="false" aria-controls="results">과제 v4</button>
+      <button type="button" value="v5" aria-pressed="false" aria-controls="results">과제 v5</button>
+      <button type="button" value="main" aria-pressed="false" aria-controls="results">기존 결과 (main)</button>
+    </div>
+    <section class="summary" aria-label="선택한 과제의 최근 결과 최대 100개 요약">
       <div><span>Passed</span><strong id="passed">—</strong></div>
       <div><span>Failed</span><strong id="failed">—</strong></div>
       <div><span>Total</span><strong id="total">—</strong></div>
@@ -67,6 +77,7 @@
         <tbody></tbody>
       </table>
     </section>
+    <footer>선택한 과제의 최근 결과를 최대 100개 표시합니다. 공개 전 과제에는 결과가 없습니다.</footer>
     <footer id="updated"></footer>
   </main>
 
@@ -74,6 +85,9 @@
     const API_URL = "/api/results";
     const table = document.querySelector("#results");
     const message = document.querySelector("#message");
+    const assignmentButtons = document.querySelectorAll(".assignment-filter button");
+    let assignment = "v1";
+    let pending;
 
     function cell(row, value, className) {
       const element = document.createElement("td");
@@ -90,13 +104,19 @@
     }
 
     async function load() {
+      pending?.abort();
+      const request = new AbortController();
+      pending = request;
       table.hidden = true;
       message.hidden = false;
       message.textContent = "결과를 불러오는 중…";
+      for (const id of ["passed", "failed", "total"]) document.getElementById(id).textContent = "—";
+      document.querySelector("#updated").textContent = "";
       try {
-        const response = await fetch(API_URL);
+        const response = await fetch(API_URL + "?assignment=" + encodeURIComponent(assignment), { signal: request.signal });
         if (!response.ok) throw new Error(`HTTP ${response.status}`);
         const { results } = await response.json();
+        if (request.signal.aborted) return;
         const body = table.querySelector("tbody");
         body.replaceChildren();
 
@@ -118,11 +138,19 @@
         table.hidden = results.length === 0;
         document.querySelector("#updated").textContent = `최근 갱신 ${new Date().toLocaleString("ko-KR")}`;
       } catch (error) {
+        if (request.signal.aborted) return;
         message.textContent = "결과를 불러오지 못했습니다. 잠시 후 다시 시도해 주세요.";
       }
     }
 
     document.querySelector("#refresh").addEventListener("click", load);
+    for (const button of assignmentButtons) {
+      button.addEventListener("click", () => {
+        assignment = button.value;
+        for (const option of assignmentButtons) option.setAttribute("aria-pressed", String(option === button));
+        load();
+      });
+    }
     load();
   </script>
 </body>

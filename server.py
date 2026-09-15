@@ -5,7 +5,7 @@ import re
 from datetime import datetime, timezone
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
-from urllib.parse import urlencode
+from urllib.parse import parse_qs, urlencode, urlsplit
 from urllib.request import Request, urlopen
 
 import jwt
@@ -13,9 +13,8 @@ import jwt
 MAX_BODY_BYTES = 4096
 COMMIT_PATTERN = re.compile(r"[0-9a-fA-F]{40}")
 REPOSITORY_PATTERN = re.compile(r"[A-Za-z0-9_.-]{1,100}/[A-Za-z0-9_.-]{1,100}")
-ASSIGNMENT_PATTERN = re.compile(r"[A-Za-z0-9._-]{1,100}")
+ASSIGNMENT_PATTERN = re.compile(r"v[1-5]")
 RESULT_STATUSES = {"PASSED", "FAILED", "ERROR"}
-ASSIGNMENT = "main"
 OIDC_ISSUER = "https://token.actions.githubusercontent.com"
 OIDC_JWKS = jwt.PyJWKClient(f"{OIDC_ISSUER}/.well-known/jwks")
 
@@ -53,8 +52,10 @@ def validate_request(payload):
         raise ValueError("repository must be an owner/name pair")
     if not isinstance(result["commit"], str) or not COMMIT_PATTERN.fullmatch(result["commit"]):
         raise ValueError("commit must be a 40-character SHA")
-    if result["assignment"] != ASSIGNMENT:
-        raise ValueError(f"assignment must be {ASSIGNMENT}")
+    if not isinstance(result["assignment"], str) or not ASSIGNMENT_PATTERN.fullmatch(
+        result["assignment"]
+    ):
+        raise ValueError("assignment must be v1 through v5")
     if not isinstance(result["assignment_sha"], str) or not COMMIT_PATTERN.fullmatch(
         result["assignment_sha"]
     ):
@@ -182,7 +183,7 @@ def save_result(result):
             raise RuntimeError("Supabase rejected the result")
 
 
-def load_results():
+def load_results(assignment=None):
     supabase_url = os.environ.get("SUPABASE_URL", "").rstrip("/")
     secret_key = os.environ.get("SUPABASE_SECRET_KEY")
     if not supabase_url.startswith("https://") or not secret_key:
@@ -190,9 +191,10 @@ def load_results():
 
     query = urlencode(
         {
-            "select": "repository,assignment,commit_sha,status,run_number,run_attempt,graded_at",
+            "select": "repository,assignment,assignment_sha,commit_sha,status,run_number,run_attempt,graded_at",
             "order": "graded_at.desc",
             "limit": 100,
+            **({"assignment": f"eq.{assignment}"} if assignment else {}),
         }
     )
     request = Request(
@@ -207,15 +209,24 @@ def load_results():
 
 class ResultHandler(BaseHTTPRequestHandler):
     def do_GET(self):
-        if self.path == "/":
+        url = urlsplit(self.path)
+        if url.path == "/":
             self.send_html(Path(__file__).with_name("dashboard").joinpath("index.html").read_bytes())
             return
-        if self.path not in ("/results", "/api/results"):
+        if url.path not in ("/results", "/api/results"):
             self.send_json(404, {"error": "not found"})
             return
 
+        assignments = parse_qs(url.query, keep_blank_values=True).get("assignment", [])
+        if assignments and (
+            len(assignments) != 1
+            or (assignments[0] != "main" and not ASSIGNMENT_PATTERN.fullmatch(assignments[0]))
+        ):
+            self.send_json(400, {"error": "assignment must be v1 through v5, or main for legacy results"})
+            return
+
         try:
-            results = load_results()
+            results = load_results(assignments[0] if assignments else None)
         except (OSError, RuntimeError, json.JSONDecodeError):
             self.send_json(500, {"error": "failed to load results"})
             return

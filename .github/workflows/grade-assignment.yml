@@ -1,0 +1,116 @@
+name: Grade one assignment
+
+on:
+  workflow_call:
+    inputs:
+      assignment:
+        required: true
+        type: string
+      assignment_ref:
+        required: true
+        type: string
+      result_url:
+        description: Result API base URL
+        required: false
+        default: ""
+        type: string
+
+jobs:
+  grade:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    outputs:
+      assignment_sha: ${{ steps.assignment-version.outputs.sha }}
+    permissions:
+      contents: read
+    steps:
+      - name: Validate assignment tag
+        shell: bash
+        env:
+          ASSIGNMENT: ${{ inputs.assignment }}
+          ASSIGNMENT_REF: ${{ inputs.assignment_ref }}
+        run: |
+          [[ "$ASSIGNMENT" =~ ^v[1-5]$ ]]
+          [[ "$ASSIGNMENT_REF" =~ ^assignment-${ASSIGNMENT}(\.[0-9]+)?$ ]]
+
+      - name: Checkout student submission
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.sha }}
+          path: student
+          persist-credentials: false
+
+      - name: Checkout assignment
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: WaffleStudio24-5/spring-seminar-upstream
+          ref: refs/tags/${{ inputs.assignment_ref }}
+          path: assignment
+          persist-credentials: false
+
+      - name: Record assignment version
+        id: assignment-version
+        working-directory: assignment
+        run: echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+
+      - name: Apply student implementation
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -d student/src/main
+          rm -r -- assignment/src/main
+          cp -R -- student/src/main assignment/src/main
+
+      - name: Run tests
+        working-directory: assignment
+        run: ./gradlew test --no-daemon
+
+  report:
+    needs: grade
+    if: ${{ always() && inputs.result_url != '' }}
+    runs-on: ubuntu-slim
+    permissions:
+      id-token: write
+    steps:
+      - name: Report result
+        env:
+          ASSIGNMENT: ${{ inputs.assignment }}
+          ASSIGNMENT_SHA: ${{ needs.grade.outputs.assignment_sha }}
+          COMMIT_SHA: ${{ github.sha }}
+          GRADE_RESULT: ${{ needs.grade.result }}
+          REPOSITORY: ${{ github.repository }}
+          RESULT_URL: ${{ inputs.result_url }}
+          RUN_ATTEMPT: ${{ github.run_attempt }}
+          RUN_ID: ${{ github.run_id }}
+          RUN_NUMBER: ${{ github.run_number }}
+        run: |
+          set -euo pipefail
+
+          case "$GRADE_RESULT" in
+            success) status=PASSED ;;
+            failure) status=FAILED ;;
+            *) status=ERROR ;;
+          esac
+
+          oidc_response=$(curl --fail-with-body --silent --show-error \
+            --header "Authorization: Bearer ${ACTIONS_ID_TOKEN_REQUEST_TOKEN}" \
+            "${ACTIONS_ID_TOKEN_REQUEST_URL}&audience=seminar-judge")
+          oidc_token=$(jq --exit-status --raw-output '.value' <<<"$oidc_response")
+          request=$(jq --null-input \
+            --arg repository "$REPOSITORY" \
+            --arg commit "$COMMIT_SHA" \
+            --arg assignment "$ASSIGNMENT" \
+            --arg assignment_sha "$ASSIGNMENT_SHA" \
+            --arg status "$status" \
+            --arg run_id "$RUN_ID" \
+            --arg run_number "$RUN_NUMBER" \
+            --arg run_attempt "$RUN_ATTEMPT" \
+            '{repository: $repository, commit: $commit, assignment: $assignment,
+              assignment_sha: $assignment_sha, status: $status, run_id: $run_id,
+              run_number: $run_number, run_attempt: $run_attempt}')
+
+          curl --fail-with-body --silent --show-error \
+            --request POST "${RESULT_URL%/}/results" \
+            --header "Authorization: Bearer ${oidc_token}" \
+            --header "Content-Type: application/json" \
+            --data "$request"
