@@ -120,7 +120,7 @@ jobs:
 
 기존 운영 환경에서는 위의 새 `ALLOWED_WORKFLOW_REF` 값으로 한 번 변경하고 재배포합니다. 이후 과제 추가나 테스트 수정 때는 이 환경변수를 바꾸지 않습니다. 학생 workflow의 `permissions`도 위 예시와 일치하는지 확인합니다.
 
-기존 `main` 채점에 사용한 테스트는 운영진이 v1과 동일하다고 확인했습니다. `20260916000000_copy_legacy_results_to_v1.sql`을 적용하면 기존 결과를 v1에도 복사합니다. 이미 v1 결과가 있는 학생은 그 결과를 유지하며, 실제 채점에 사용한 SHA와 채점 시각도 그대로 보존합니다. 기존 `main` 기록은 삭제하지 않으므로 **기존 결과 (main)** 버튼에서도 조회할 수 있습니다.
+기존 `main` 채점에 사용한 테스트는 운영진이 v1과 동일하다고 확인했습니다. `20260916000000_copy_legacy_results_to_v1.sql`은 기존 결과를 v1으로 옮겼고, 후속 파일 `20260916010000_merge_legacy_results_into_v1.sql`은 이미 v1 결과가 있는 저장소의 중복 `main` 행을 삭제한 뒤 남은 `main` 행의 과제 이름을 v1으로 바꿉니다. 기존 결과의 SHA, 상태, 채점 시각은 보존합니다. 사이트에는 v1~v5만 표시합니다.
 
 ## 과제 공개와 테스트 수정
 
@@ -219,7 +219,7 @@ npx supabase migration list
 
 ### 결과 조회
 
-`GET /api/results?assignment=v2`는 선택한 과제의 최근 결과 100개를 `{"results": [...]}`로 반환합니다. 필터를 생략하면 전체 과제 중 최근 100개를 반환합니다. `assignment=main`은 기존 결과 조회용입니다.
+`GET /api/results?assignment=v2`는 선택한 과제의 최근 결과 100개를 `{"results": [...]}`로 반환합니다. 필터를 생략하면 전체 과제 중 최근 100개를 반환합니다.
 
 각 결과에는 `repository`, `assignment`, `assignment_sha`, `commit_sha`, `status`, `run_number`, `run_attempt`, `graded_at`이 포함됩니다. 대시보드의 통계도 이 조회 범위를 기준으로 계산합니다. v1~v5 버튼은 항상 표시되며 결과가 없으면 안내 메시지를 보여줍니다.
 

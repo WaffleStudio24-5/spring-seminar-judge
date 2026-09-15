@@ -12,7 +12,8 @@ insert into public.results (
     ('test/legacy-v1-copy', 'v2', repeat('e', 40), repeat('f', 40), 'FAILED', 4, 3, 1, '2026-09-03Z');
 
 \ir ../migrations/20260916000000_copy_legacy_results_to_v1.sql
-\ir ../migrations/20260916000000_copy_legacy_results_to_v1.sql
+\ir ../migrations/20260916010000_merge_legacy_results_into_v1.sql
+\ir ../migrations/20260916010000_merge_legacy_results_into_v1.sql
 
 do $$
 begin
@@ -34,7 +35,10 @@ begin
         raise exception 'existing v1 result was overwritten';
     end if;
     if (select count(*) from public.results
-        where repository in ('test/legacy-v1-copy', 'test/legacy-v1-keep')) <> 5
+        where repository in ('test/legacy-v1-copy', 'test/legacy-v1-keep')) <> 3
+    or exists (
+        select 1 from public.results where assignment = 'main'
+    )
     or not exists (
         select 1 from public.results
         where repository = 'test/legacy-v1-copy' and assignment = 'v2'
