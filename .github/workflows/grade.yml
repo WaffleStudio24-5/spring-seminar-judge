@@ -17,6 +17,8 @@ jobs:
         include:
           - assignment: v1
             assignment_ref: assignment-v1
+          - assignment: v2
+            assignment_ref: assignment-v2
     permissions:
       contents: read
       id-token: write
