@@ -1,0 +1,26 @@
+name: Check results API
+
+on:
+  schedule:
+    - cron: '17 */6 * * *'
+  workflow_dispatch:
+
+permissions: {}
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - name: Check results from Supabase
+        shell: python
+        run: |
+          import json
+          from urllib.request import urlopen
+
+          url = "https://spring-seminar-judge.vercel.app/api/results?assignment=v1"
+          with urlopen(url, timeout=30) as response:
+              assert response.status == 200, f"Unexpected HTTP status: {response.status}"
+              data = json.load(response)
+          assert isinstance(data, dict) and isinstance(data.get("results"), list), "Expected a results array"
+          print(f"Results API OK: {len(data['results'])} results")
